@@ -64,7 +64,6 @@ function showPhoto(src){
   slides.appendChild(img);
   const older=[...slides.querySelectorAll(".photo")].filter(el=>el!==img);
   requestAnimationFrame(()=>requestAnimationFrame(()=>{img.style.opacity="1"}));
-  older.forEach(el=>{el.style.opacity="0"});
   setTimeout(()=>older.forEach(el=>el.remove()),FADE+80);
 }
 function clearPhotos(){
