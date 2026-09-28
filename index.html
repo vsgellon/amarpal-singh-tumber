@@ -90,7 +90,7 @@ async function loadPhotos(){
   const items=await res.json();
   if(!Array.isArray(items))return[];
   const stamp=Date.now();
-  return items.filter(i=>i.type==="file"&&/\.(jpe?g|png|gif|webp|avif)$/i.test(i.name)&&i.download_url).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).map(i=>i.download_url+"?v="+stamp);
+  return items.filter(i=>i.type==="file"&&/\.(jpe?g|png|gif|webp|avif)$/i.test(i.name)&&!/^IMG-20260925-WA0000\b/i.test(i.name)&&i.download_url).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).map(i=>i.download_url+"?v="+stamp);
 }
 document.getElementById("play").onclick=async()=>{
   if(mode==="paused"&&photos.length){setMode("playing");armTimer();return}
