@@ -47,10 +47,52 @@ button[aria-pressed="true"]{background:transparent;color:var(--ivory)}
 const FADE=1800;
 const inner=document.getElementById("inner");
 const buttons={playing:document.getElementById("play"),paused:document.getElementById("pause"),stopped:document.getElementById("stop")};
-let mode="stopped",photos=[],index=0,timer=null,portrait="",slides=null,speed=5;
+let mode="stopped",photos=[],timer=null,portrait="",slides=null,speed=5,deck=[],lastSrc="",ready=null,readySrc="";
 function dwellMs(){
   if(speed<=5) return Math.round(20000-((speed-1)/4)*13000);
   return Math.round(7000-((speed-5)/5)*3000);
+}
+function shuffle(list){
+  const next=list.slice();
+  for(let i=next.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    const swap=next[i]; next[i]=next[j]; next[j]=swap;
+  }
+  return next;
+}
+function pull(){
+  if(!photos.length) return "";
+  if(!deck.length){
+    deck=shuffle(photos);
+    if(deck.length>1 && deck[0]===lastSrc) deck.push(deck.shift());
+  }
+  return deck.shift()||"";
+}
+function preload(skips){
+  if(mode==="stopped" || skips>=photos.length) return;
+  const src=pull();
+  if(!src) return;
+  const img=new Image();
+  img.onload=function(){
+    if(mode==="stopped") return;
+    if(img.naturalWidth<1){ preload(skips+1); return; }
+    ready=img; readySrc=src;
+  };
+  img.onerror=function(){ if(mode!=="stopped") preload(skips+1); };
+  img.src=src;
+}
+function showReady(){
+  if(!ready || !readySrc || !ready.complete || ready.naturalWidth<1 || !slides) return;
+  const img=ready, src=readySrc;
+  ready=null; readySrc="";
+  lastSrc=src;
+  img.className="photo";
+  img.alt="Photograph in memory of Amarpal Singh Tumber";
+  slides.appendChild(img);
+  const older=[...slides.querySelectorAll(".photo")].filter(el=>el!==img);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{img.style.opacity="1"}));
+  setTimeout(()=>older.forEach(el=>el.remove()),FADE+80);
+  preload(0);
 }
 function cover(note){
   if(!document.getElementById("cover")){
@@ -63,16 +105,6 @@ function cover(note){
   const noteEl=document.getElementById("note");
   if(noteEl) noteEl.textContent=note||"";
 }
-function showPhoto(src){
-  const img=document.createElement("img");
-  img.className="photo";
-  img.alt="Photograph in memory of Amarpal Singh Tumber";
-  img.src=src;
-  slides.appendChild(img);
-  const older=[...slides.querySelectorAll(".photo")].filter(el=>el!==img);
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{img.style.opacity="1"}));
-  setTimeout(()=>older.forEach(el=>el.remove()),FADE+80);
-}
 function clearPhotos(){
   if(!slides) return;
   [...slides.querySelectorAll(".photo")].forEach(el=>{el.style.opacity="0"});
@@ -82,7 +114,23 @@ function setMode(next){mode=next;for(const k in buttons)buttons[k].setAttribute(
 function clearTimer(){if(timer){clearInterval(timer);timer=null}}
 function armTimer(){
   clearTimer();
-  if(mode==="playing"&&photos.length>1) timer=setInterval(()=>{index=(index+1)%photos.length;showPhoto(photos[index])},dwellMs());
+  if(mode==="playing"&&photos.length>1) timer=setInterval(showReady,dwellMs());
+}
+function startFirst(skips){
+  if(mode==="stopped") return;
+  if(skips>=photos.length){setMode("stopped");cover("Photographs will appear here once they are added.");return}
+  const src=pull();
+  if(!src){setMode("stopped");cover("Photographs will appear here once they are added.");return}
+  const img=new Image();
+  img.onload=function(){
+    if(mode==="stopped") return;
+    if(img.naturalWidth<1){ startFirst(skips+1); return; }
+    ready=img; readySrc=src;
+    showReady();
+    armTimer();
+  };
+  img.onerror=function(){ if(mode!=="stopped") startFirst(skips+1); };
+  img.src=src;
 }
 async function loadPhotos(){
   const res=await fetch("https://api.github.com/repos/vsgellon/amarpal-singh-tumber/contents/photos?ref=main",{headers:{Accept:"application/vnd.github+json"}});
@@ -90,16 +138,18 @@ async function loadPhotos(){
   const items=await res.json();
   if(!Array.isArray(items))return[];
   const stamp=Date.now();
-  return items.filter(i=>i.type==="file"&&/\.(jpe?g|png|gif|webp|avif)$/i.test(i.name)&&!/^IMG-20260925-WA0000\b/i.test(i.name)&&i.download_url).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).map(i=>i.download_url+"?v="+stamp);
+  return items.filter(i=>i.type==="file"&&/\.(jpe?g|png|gif|webp|avif)$/i.test(i.name)&&!/^IMG-20260925-WA0000\b/i.test(i.name)&&i.download_url).map(i=>i.download_url+"?v="+stamp);
 }
 document.getElementById("play").onclick=async()=>{
   if(mode==="paused"&&photos.length){setMode("playing");armTimer();return}
   photos=await loadPhotos().catch(()=>[]);
+  deck=[]; lastSrc=""; ready=null; readySrc="";
   if(!photos.length){setMode("stopped");cover("Photographs will appear here once they are added.");return}
-  index=0;setMode("playing");showPhoto(photos[0]);armTimer();
+  setMode("playing");
+  startFirst(0);
 };
 document.getElementById("pause").onclick=()=>{if(mode!=="playing")return;clearTimer();setMode("paused")};
-document.getElementById("stop").onclick=()=>{clearTimer();photos=[];index=0;setMode("stopped");clearPhotos();cover("")};
+document.getElementById("stop").onclick=()=>{clearTimer();photos=[];deck=[];lastSrc="";ready=null;readySrc="";setMode("stopped");clearPhotos();cover("")};
 document.getElementById("speed").oninput=(event)=>{speed=Number(event.target.value);armTimer()};
 fetch("https://raw.githubusercontent.com/vsgellon/amarpal-singh-tumber/main/portrait.b64").then(r=>r.text()).then(t=>{portrait="data:image/jpeg;base64,"+t.trim();cover("")}).catch(()=>{});
 cover("");
