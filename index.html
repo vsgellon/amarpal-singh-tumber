@@ -25,9 +25,11 @@ h1{margin:0;color:var(--ink);font-size:clamp(2rem,5vw,3.2rem);font-weight:600;li
 .note{margin:8px 0 0}
 #slides{position:absolute;inset:0;z-index:2}
 .photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 1.8s ease-in-out}
-.bar{display:flex;justify-content:center;gap:2px;padding:2px 8px 6px}
+.bar{display:flex;justify-content:center;align-items:center;gap:2px;padding:2px 8px 6px}
 button{border:0;background:transparent;color:rgba(246,241,231,.4);font:inherit;font-size:.9rem;line-height:1;cursor:pointer;padding:2px 8px}
 button[aria-pressed="true"]{background:transparent;color:var(--ivory)}
+.speed{display:inline-flex;align-items:center;gap:6px;margin-left:8px;color:rgba(246,241,231,.4);font-size:.9rem;line-height:1}
+.speed input{width:72px;height:14px;margin:0;accent-color:#f6f1e7;cursor:pointer}
 @media (prefers-reduced-motion:reduce){.photo{transition:none}}
 </style>
 </head>
@@ -38,13 +40,18 @@ button[aria-pressed="true"]{background:transparent;color:var(--ivory)}
     <button id="play" type="button">Play</button>
     <button id="pause" type="button">Pause</button>
     <button id="stop" type="button" aria-pressed="true">Stop</button>
+    <label class="speed">Speed<input id="speed" type="range" min="1" max="10" value="5" aria-label="Slideshow speed" title="Left is slower, right is faster"></label>
   </div>
 </div>
 <script>
-const FADE=1800, DWELL=7000;
+const FADE=1800;
 const inner=document.getElementById("inner");
 const buttons={playing:document.getElementById("play"),paused:document.getElementById("pause"),stopped:document.getElementById("stop")};
-let mode="stopped",photos=[],index=0,timer=null,portrait="",slides=null;
+let mode="stopped",photos=[],index=0,timer=null,portrait="",slides=null,speed=5;
+function dwellMs(){
+  if(speed<=5) return Math.round(20000-((speed-1)/4)*13000);
+  return Math.round(7000-((speed-5)/5)*3000);
+}
 function cover(note){
   if(!document.getElementById("cover")){
     const pic=portrait?'<img alt="Portrait of Amarpal Singh Tumber" src="'+portrait+'">':'';
@@ -73,6 +80,10 @@ function clearPhotos(){
 }
 function setMode(next){mode=next;for(const k in buttons)buttons[k].setAttribute("aria-pressed",k===mode?"true":"false")}
 function clearTimer(){if(timer){clearInterval(timer);timer=null}}
+function armTimer(){
+  clearTimer();
+  if(mode==="playing"&&photos.length>1) timer=setInterval(()=>{index=(index+1)%photos.length;showPhoto(photos[index])},dwellMs());
+}
 async function loadPhotos(){
   const res=await fetch("https://api.github.com/repos/vsgellon/amarpal-singh-tumber/contents/photos?ref=main",{headers:{Accept:"application/vnd.github+json"}});
   if(!res.ok)return[];
@@ -82,14 +93,14 @@ async function loadPhotos(){
   return items.filter(i=>i.type==="file"&&/\.(jpe?g|png|gif|webp|avif)$/i.test(i.name)&&i.download_url).sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true})).map(i=>i.download_url+"?v="+stamp);
 }
 document.getElementById("play").onclick=async()=>{
-  if(mode==="paused"&&photos.length){setMode("playing");if(photos.length>1)timer=setInterval(()=>{index=(index+1)%photos.length;showPhoto(photos[index])},DWELL);return}
+  if(mode==="paused"&&photos.length){setMode("playing");armTimer();return}
   photos=await loadPhotos().catch(()=>[]);
   if(!photos.length){setMode("stopped");cover("Photographs will appear here once they are added.");return}
-  index=0;setMode("playing");showPhoto(photos[0]);clearTimer();
-  if(photos.length>1)timer=setInterval(()=>{index=(index+1)%photos.length;showPhoto(photos[index])},DWELL);
+  index=0;setMode("playing");showPhoto(photos[0]);armTimer();
 };
 document.getElementById("pause").onclick=()=>{if(mode!=="playing")return;clearTimer();setMode("paused")};
 document.getElementById("stop").onclick=()=>{clearTimer();photos=[];index=0;setMode("stopped");clearPhotos();cover("")};
+document.getElementById("speed").oninput=(event)=>{speed=Number(event.target.value);armTimer()};
 fetch("https://raw.githubusercontent.com/vsgellon/amarpal-singh-tumber/main/portrait.b64").then(r=>r.text()).then(t=>{portrait="data:image/jpeg;base64,"+t.trim();cover("")}).catch(()=>{});
 cover("");
 </script>
